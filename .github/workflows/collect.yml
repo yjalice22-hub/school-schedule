@@ -1,0 +1,91 @@
+name: NEIS 학사일정 수집
+
+on:
+  schedule:
+    - cron: "0 21 * * 0"     # 매주 월요일 06:00 (한국 시간) — GitHub cron은 UTC 기준
+    - cron: "0 21 * 1-3 3"   # 1~3월에는 목요일 06:00에도 한 번 더 (새 학년도 등록 확인)
+  workflow_dispatch:          # Actions 탭의 'Run workflow' 버튼으로 수동 실행
+    inputs:
+      years:
+        description: "학년도 (예: 2026 또는 2025,2026). auto = 현재·다음 학년도"
+        default: "auto"
+      offices:
+        description: "교육청 코드 (예: B10,J10). all = 17개 시·도 전체"
+        default: "all"
+      mode:
+        description: "조회 방식"
+        type: choice
+        options: [auto, bulk, school]
+        default: auto
+
+permissions:
+  contents: write            # 수집 결과(docs/data)를 저장소에 커밋하기 위해 필요
+
+concurrency:
+  group: neis-collect
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: 단위 시험
+        run: python -m unittest discover -s collector/tests -t .
+
+      - name: 이전 수집 조각 복원 (중단 후 이어 받기)
+        uses: actions/cache/restore@v4
+        with:
+          path: cache
+          key: neis-cache-${{ github.run_id }}
+          restore-keys: neis-cache-
+
+      - name: 수집 및 집계
+        env:
+          NEIS_API_KEY: ${{ secrets.NEIS_API_KEY }}
+        run: >
+          python -m collector.run
+          --years "${{ inputs.years || 'auto' }}"
+          --offices "${{ inputs.offices || 'all' }}"
+          --mode "${{ inputs.mode || 'auto' }}"
+
+      - name: 수집 조각 저장
+        if: always() && hashFiles('cache/**') != ''
+        uses: actions/cache/save@v4
+        with:
+          path: cache
+          key: neis-cache-${{ github.run_id }}
+
+      - name: 변경된 데이터 커밋
+        if: always()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/data
+          if git diff --cached --quiet; then
+            echo "변경된 데이터 없음"
+          else
+            git commit -m "data: NEIS 학사일정 수집 $(TZ=Asia/Seoul date '+%Y-%m-%d %H:%M')"
+            git push
+          fi
+
+      - name: 수집 결과 요약
+        if: always()
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json, pathlib
+          p = pathlib.Path("docs/data/manifest.json")
+          if not p.exists():
+              print("manifest 없음 — 수집 단계 로그를 확인하세요"); raise SystemExit
+          m = json.loads(p.read_text(encoding="utf-8")); r = m["lastRun"]
+          print(f"### 결과: {r['status']}  \n호출 {r.get('calls')}회 · 재시도 {r.get('retries')}회 · {r.get('seconds')}초  \n{r.get('message','')}\n")
+          print("| 학년도 | 상태 | 학교 | 등록률 | 실패 학교 |\n|---|---|---|---|---|")
+          for y, v in r.get("yearResults", {}).items():
+              print(f"| {y} | {v.get('status')} | {v.get('schools')} | {v.get('coverage')} | {v.get('failedSchools')} |")
+          PY

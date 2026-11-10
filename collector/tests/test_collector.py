@@ -1,7 +1,8 @@
 """단위 시험: python -m unittest discover -s collector/tests -t ."""
 import unittest
 
-from collector.classify import classify_name, sem_of_date
+from collector.build_data import build_year
+from collector.classify import classify_event, classify_name, grades_in_name, sem_of_date
 from collector.neis_client import NeisClient, DailyLimitError, AuthError, MissingParamError
 from collector.stats import summarize, ymd_to_ord, ord_to_ymd
 
@@ -22,6 +23,26 @@ class ClassifyTest(unittest.TestCase):
         self.assertEqual(self.c("제2회 지필고사"), ("EXAM", "FINAL"))
         self.assertEqual(self.c("2회고사"), ("EXAM", "FINAL"))
         self.assertEqual(self.c("3차 지필평가")[0], "EXAM_REVIEW")
+
+    def test_real_neis_patterns(self):
+        # 2026-11 서울·경기 실제 수집에서 확인된 표현
+        self.assertEqual(self.c("정기시험1차"), ("EXAM", "MID"))
+        self.assertEqual(self.c("정기시험(2차)"), ("EXAM", "FINAL"))
+        self.assertEqual(self.c("지필평가 2차"), ("EXAM", "FINAL"))
+        self.assertEqual(self.c("정기시험(중간)"), ("EXAM", "MID"))
+        self.assertEqual(self.c("중간 정기시험"), ("EXAM", "MID"))
+        self.assertEqual(self.c("2학기 2차 지필평가(3학년)"), ("EXAM", "FINAL"))
+        self.assertEqual(self.c("전국연합평가", "H")[0], "MOCK")
+        self.assertEqual(self.c("중간놀이")[0], "OTHER")
+        self.assertEqual(classify_event("정기시험", "2차 정기시험", "M")["type"], "FINAL")
+
+    def test_grades_in_name(self):
+        self.assertEqual(grades_in_name("기말고사(3학년)", 3), 0b100)
+        self.assertEqual(grades_in_name("정기시험(1,2학년)", 3), 0b011)
+        self.assertEqual(grades_in_name("기말고사(1,2)", 3), 0b011)
+        self.assertEqual(grades_in_name("2,3학년 지필평가", 3), 0b110)
+        self.assertEqual(grades_in_name("정기시험", 3), 0)
+        self.assertEqual(grades_in_name("2학기 정기시험", 3), 0)
 
     def test_review_and_exclusions(self):
         self.assertEqual(self.c("지필평가")[0], "EXAM_REVIEW")
@@ -52,6 +73,44 @@ class ClassifyTest(unittest.TestCase):
         self.assertEqual(sem_of_date(20260427), 1)
         self.assertEqual(sem_of_date(20260818), 2)
         self.assertEqual(sem_of_date(20270105), 2)
+
+
+class BuildTest(unittest.TestCase):
+    def rows(self, items):
+        out = []
+        for ymd, name, flags in items:
+            r = {"ATPT_OFCDC_SC_CODE": "B10", "SD_SCHUL_CODE": "7000001", "SCHUL_NM": "시험중", "AY": "2026", "DGHT_CRSE_SC_NM": "주간",
+                 "SCHUL_CRSE_SC_NM": "중학교", "SBTR_DD_SC_NM": "해당없음", "AA_YMD": ymd, "EVENT_NM": name, "EVENT_CNTNT": ""}
+            for i, f in enumerate(["ONE_GRADE_EVENT_YN", "TW_GRADE_EVENT_YN", "THREE_GRADE_EVENT_YN", "FR_GRADE_EVENT_YN", "FIV_GRADE_EVENT_YN", "SIX_GRADE_EVENT_YN"]):
+                r[f] = "Y" if i < 3 and flags[i] == "Y" else "*"
+            out.append(r)
+        return out
+
+    def eps(self, items):
+        info = [{"ATPT_OFCDC_SC_CODE": "B10", "SD_SCHUL_CODE": "7000001", "SCHUL_NM": "시험중", "SCHUL_KND_SC_NM": "중학교"}]
+        files, _ = build_year(2026, info, self.rows(items))
+        e = files["episodes.json"]
+        return [(r[1], r[2], e["types"][r[3]], r[4], r[6], r[10] >= 0) for r in e["rows"]]
+
+    def test_multi_row_exam_is_one_episode(self):
+        got = self.eps([("20260427", "중간고사", "YYY"), ("20260428", "중간고사", "YYY"), ("20260429", "중간고사(3일차)", "YYY")])
+        self.assertEqual(len(got), 3)                      # 학년 3개
+        self.assertTrue(all(g[2] == "MID" and g[3] == 20260427 and g[4] == 3 and not g[5] for g in got))
+
+    def test_unlabeled_exams_by_order(self):
+        got = self.eps([("20261012", "정기시험", "YYY"), ("20261013", "정기시험", "YYY"), ("20261207", "정기시험", "YYY")])
+        types = {(g[0], g[2]) for g in got if not g[5]}
+        self.assertIn((1, "MID"), types)
+        self.assertIn((1, "FINAL"), types)
+
+    def test_single_unlabeled_stays_review(self):
+        got = self.eps([("20261207", "정기시험", "YYY")])
+        self.assertTrue(all(g[5] for g in got))
+
+    def test_grade_from_name_overrides_flags(self):
+        got = self.eps([("20261123", "기말고사(3학년)", "YYY"), ("20261207", "기말고사(1,2학년)", "YYY")])
+        by_grade = {g[0]: g[3] for g in got}
+        self.assertEqual(by_grade, {1: 20261207, 2: 20261207, 3: 20261123})
 
 
 class StatsTest(unittest.TestCase):

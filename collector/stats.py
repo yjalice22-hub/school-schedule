@@ -37,7 +37,9 @@ def summarize(values):
             "q3": rnd(quantile(v, .75)), "max": v[-1]}
 
 
-def status_of(n, rate, thresh):
+def status_of(n, rate, thresh, den=None):
+    if den == 0:
+        return "uncollected"      # 그 지역·학교급을 아직 수집하지 않음
     if n == 0:
         return "none"
     if n < thresh["MIN_N"]:

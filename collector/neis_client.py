@@ -7,6 +7,7 @@
 """
 import json
 import random
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -46,15 +47,20 @@ class NeisClient:
         self.page_size = page_size or config.PAGE_SIZE
         self.log = log
         self._last = 0.0
+        self._lock = threading.Lock()
         self.calls = 0
         self.retried = 0
 
     # ---------- 저수준 요청 ----------
     def _throttle(self):
-        wait = self.interval - (time.monotonic() - self._last)
-        if wait > 0:
-            time.sleep(wait)
-        self._last = time.monotonic()
+        # 여러 스레드가 동시에 호출해도 요청 시작 간격은 interval 이상 유지
+        with self._lock:
+            now = time.monotonic()
+            start = max(now, self._last + self.interval)
+            self._last = start
+            self.calls += 1
+        if start > now:
+            time.sleep(start - now)
 
     def _request(self, service, params):
         q = {"KEY": self.key, "Type": "json", **params}
@@ -63,7 +69,6 @@ class NeisClient:
         while True:
             attempt += 1
             self._throttle()
-            self.calls += 1
             try:
                 req = urllib.request.Request(url, headers={"User-Agent": "school-schedule-collector/1.0"})
                 with urllib.request.urlopen(req, timeout=config.TIMEOUT) as r:
@@ -83,7 +88,8 @@ class NeisClient:
                     raise NeisError("NETWORK", str(e))
                 err = e
             delay = min(60, 2 ** attempt) + random.uniform(0, 1)
-            self.retried += 1
+            with self._lock:
+                self.retried += 1
             self.log(f"  재시도 {attempt}/{self.retries} ({err}) — {delay:.1f}초 후")
             time.sleep(delay)
 

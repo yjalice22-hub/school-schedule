@@ -133,7 +133,7 @@ function examStat(D,q){
   const n=per.length;
   const res={...q,den,n,rate:den?n/den:null,per};
   if(st){Object.assign(res,st);res.lastEnd=Math.max(...per.map(p=>p.end));res.avgDays=mean(per.map(p=>p.days));}
-  res.status=n===0?'none':n<THRESH.MIN_N?'insufficient':n<THRESH.WARN_N?'small':(res.rate<THRESH.LOW_RATE?'lowrate':'ok');
+  res.status=den===0?'uncollected':n===0?'none':n<THRESH.MIN_N?'insufficient':n<THRESH.WARN_N?'small':(res.rate<THRESH.LOW_RATE?'lowrate':'ok');
   return res;
 }
 function milestoneStat(D,{ay,region,level,key}){
@@ -142,7 +142,7 @@ function milestoneStat(D,{ay,region,level,key}){
   for(const s of ss){const m=D.milestones[s.idx][ay];if(m&&m[key]!=null)vals.push(m[key])}
   const st=summarize(vals)||{};
   const n=vals.length,den=ss.length;
-  return {...st,n,den,rate:den?n/den:null,status:n===0?'none':n<THRESH.MIN_N?'insufficient':n<THRESH.WARN_N?'small':'ok'};
+  return {...st,n,den,rate:den?n/den:null,status:den===0?'uncollected':n===0?'none':n<THRESH.MIN_N?'insufficient':n<THRESH.WARN_N?'small':'ok'};
 }
 G.ENG={REGIONS,REGION_BY,LEVELS,LEVEL_SHORT,MAXG,TYPE_NAME,THRESH,CAT_LABEL,dn,fromYmd,parts,ymd,iso,dow,fmtD,fmtMD,monthOf,yearOf,ayOf,ayStart,ayEnd,mondayOf,isOff,
   quantile,summarize,mean,schoolsBy,examPerSchool,examStat,milestoneStat,newStore,ingestYear,ingestRaw};

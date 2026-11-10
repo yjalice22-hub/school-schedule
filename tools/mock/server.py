@@ -5,7 +5,7 @@
 
 응답 형식은 NEIS JSON과 같습니다: {"SchoolSchedule":[{"head":[{"list_total_count":N},{"RESULT":{...}}]},{"row":[...]}]}
 """
-import argparse, json, random, threading
+import argparse, json, random, threading, time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
@@ -19,6 +19,7 @@ ap.add_argument("--daily-limit", type=int, default=0)
 ap.add_argument("--require-school", action="store_true")
 ap.add_argument("--fail-chunk", default="")
 ap.add_argument("--seed", type=int, default=1)
+ap.add_argument("--delay", type=float, default=0.0, help="응답 지연(초) — 실제 NEIS 응답 속도 흉내")
 A = ap.parse_args()
 random.seed(A.seed)
 D = {s: json.loads((Path(A.data) / f"{s}.json").read_text(encoding="utf-8")) for s in ("schoolInfo", "SchoolSchedule")}
@@ -37,6 +38,7 @@ class H(BaseHTTPRequestHandler):
         b = json.dumps(obj, ensure_ascii=False).encode()
         self.send_response(status); self.send_header("Content-Type", "application/json;charset=UTF-8"); self.send_header("Content-Length", str(len(b))); self.end_headers(); self.wfile.write(b)
     def do_GET(self):
+        if A.delay: time.sleep(A.delay)
         u = urlparse(self.path); svc = u.path.rsplit("/", 1)[-1]; q = {k: v[0] for k, v in parse_qs(u.query).items()}
         with LOCK:
             CALLS["n"] += 1; n = CALLS["n"]

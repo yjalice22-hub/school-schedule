@@ -12,7 +12,10 @@ import datetime as dt
 import gzip
 import json
 import os
+import random
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from . import config
@@ -101,9 +104,10 @@ def detect_mode(client, offices, ay, log=print):
         return "school"
 
 
-def collect_schedule(client, ck, ay, schools, offices, mode="auto", log=print):
+def collect_schedule(client, ck, ay, schools, offices, mode="auto", log=print, workers=None, probe=False):
     """반환: (rows, report). DailyLimitError는 그대로 올려 보냅니다(이미 받은 조각은 저장됨)."""
-    report = {"mode": mode, "chunks": 0, "cached": 0, "fetched": 0, "fallback_chunks": 0, "failed_schools": []}
+    workers = workers or config.WORKERS
+    report = {"mode": mode, "chunks": 0, "cached": 0, "fetched": 0, "fallback_chunks": 0, "failed_schools": [], "probe": None}
     if mode == "auto":
         mode = detect_mode(client, offices, ay, log)
         report["mode"] = mode
@@ -111,12 +115,14 @@ def collect_schedule(client, ck, ay, schools, offices, mode="auto", log=print):
     for s in schools:
         by_office.setdefault(s["ATPT_OFCDC_SC_CODE"], []).append(s)
     rows, failed = [], set()
+    lock = threading.Lock()
 
     def per_school(code, sc, frm, to, tag):
         part = ("sched", str(ay), "school", code, f"{sc['SD_SCHUL_CODE']}_{tag}")
         got = ck.load(*part)
         if got is not None:
-            report["cached"] += 1
+            with lock:
+                report["cached"] += 1
             return got
         try:
             got = _slim(client.fetch_all("SchoolSchedule", {"ATPT_OFCDC_SC_CODE": code, "SD_SCHUL_CODE": sc["SD_SCHUL_CODE"],
@@ -125,11 +131,46 @@ def collect_schedule(client, ck, ay, schools, offices, mode="auto", log=print):
             raise
         except NeisError as e:
             log(f"    실패: {sc.get('SCHUL_NM')} ({sc['SD_SCHUL_CODE']}) {e}")
-            failed.add(sc["SD_SCHUL_CODE"])
+            with lock:
+                failed.add(sc["SD_SCHUL_CODE"])
             return []
         ck.save(got, *part)
-        report["fetched"] += 1
+        with lock:
+            report["fetched"] += 1
         return got
+
+    def run_parallel(jobs, label):
+        """jobs: [(code, sc, frm, to, tag)] → 행 목록. 동시에 workers개씩 조회합니다."""
+        out, done, t0 = [], 0, time.time()
+        if not jobs:
+            return out
+        with ThreadPoolExecutor(max_workers=workers) as ex:
+            futs = [ex.submit(per_school, *j) for j in jobs]
+            try:
+                for f in as_completed(futs):
+                    out.extend(f.result())
+                    done += 1
+                    if done % 200 == 0 or done == len(jobs):
+                        el = time.time() - t0
+                        log(f"    {label}: {done:,}/{len(jobs):,}곳 ({el / 60:.0f}분 경과, 남은 예상 {el / done * (len(jobs) - done) / 60:.0f}분)")
+            except DailyLimitError:
+                for f in futs:
+                    f.cancel()
+                raise
+        return out
+
+    # 다음 학년도처럼 아직 등록이 거의 없을 수 있는 학년도는 일부 학교만 먼저 조회해 본다
+    if probe and mode == "school":
+        frm, to = _ay_range(ay)
+        sample = random.Random(ay).sample(schools, min(config.PROBE_SIZE, len(schools)))
+        got = run_parallel([(s["ATPT_OFCDC_SC_CODE"], s, frm, to, "ay") for s in sample], f"{ay}학년도 탐색 조회")
+        hit = len({r["SD_SCHUL_CODE"] for r in got})
+        report["probe"] = {"sampled": len(sample), "withData": hit}
+        if hit == 0:
+            log(f"  {ay}학년도: 표본 {len(sample)}곳 모두 등록 일정 없음 → 전체 조회를 건너뜁니다 (다음 실행에서 다시 확인)")
+            report["skipped"] = True
+            return got, report
+        log(f"  {ay}학년도: 표본 {len(sample)}곳 중 {hit}곳 등록 → 전체 조회")
 
     for code, name in offices:
         office_schools = by_office.get(code, [])
@@ -158,9 +199,8 @@ def collect_schedule(client, ck, ay, schools, offices, mode="auto", log=print):
                         rows.extend(per_school(code, sc, frm, to, tag))
         else:
             frm, to = _ay_range(ay)
-            for sc in office_schools:
-                report["chunks"] += 1
-                rows.extend(per_school(code, sc, frm, to, "ay"))
+            report["chunks"] += len(office_schools)
+            rows.extend(run_parallel([(code, sc, frm, to, "ay") for sc in office_schools], f"{ay}학년도 {name}"))
         log(f"  {ay}학년도 {name}: {len(rows) - n0:,}행 ({time.time() - t0:.0f}초)")
     report["failed_schools"] = sorted(failed)
     return rows, report

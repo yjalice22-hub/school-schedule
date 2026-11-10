@@ -307,7 +307,7 @@ function examStat(D,q){
   const n=per.length;
   const res={...q,den,n,rate:den?n/den:null,per};
   if(st){Object.assign(res,st);res.lastEnd=Math.max(...per.map(p=>p.end));res.avgDays=mean(per.map(p=>p.days));}
-  res.status=n===0?'none':n<THRESH.MIN_N?'insufficient':n<THRESH.WARN_N?'small':(res.rate<THRESH.LOW_RATE?'lowrate':'ok');
+  res.status=den===0?'uncollected':n===0?'none':n<THRESH.MIN_N?'insufficient':n<THRESH.WARN_N?'small':(res.rate<THRESH.LOW_RATE?'lowrate':'ok');
   return res;
 }
 function milestoneStat(D,{ay,region,level,key}){
@@ -316,7 +316,7 @@ function milestoneStat(D,{ay,region,level,key}){
   for(const s of ss){const m=D.milestones[s.idx][ay];if(m&&m[key]!=null)vals.push(m[key])}
   const st=summarize(vals)||{};
   const n=vals.length,den=ss.length;
-  return {...st,n,den,rate:den?n/den:null,status:n===0?'none':n<THRESH.MIN_N?'insufficient':n<THRESH.WARN_N?'small':'ok'};
+  return {...st,n,den,rate:den?n/den:null,status:den===0?'uncollected':n===0?'none':n<THRESH.MIN_N?'insufficient':n<THRESH.WARN_N?'small':'ok'};
 }
 G.ENG={REGIONS,REGION_BY,LEVELS,LEVEL_SHORT,MAXG,TYPE_NAME,THRESH,CAT_LABEL,dn,fromYmd,parts,ymd,iso,dow,fmtD,fmtMD,monthOf,yearOf,ayOf,ayStart,ayEnd,mondayOf,isOff,
   quantile,summarize,mean,schoolsBy,examPerSchool,examStat,milestoneStat,newStore,ingestYear,ingestRaw};
@@ -438,8 +438,8 @@ function yearNotice(ay){
   if((y.coverage||0)>=THRESH.YEAR_COVERAGE)return msg;
   return msg+`<div class="notice"><b>아직 등록된 데이터가 충분하지 않습니다.</b> ${ay}학년도 학사일정을 등록한 학교는 ${(y.schoolsWithSchedule||0).toLocaleString()}곳(${pct(y.coverage||0)})입니다. 이전 학년도 통계를 대신 보여주지 않으며, 등록률이 ${pct(THRESH.YEAR_COVERAGE)} 이상이 되면 통계를 표시합니다.</div>`;
 }
-const statusChip=st=>({none:'<span class="chip mute">등록 정보 없음</span>',insufficient:'<span class="chip bad">데이터 부족</span>',small:'<span class="chip warn">표본 부족</span>',lowrate:'<span class="chip warn">등록률 낮음</span>',ok:'<span class="chip ok">정상</span>'}[st]||'');
-const statusText=st=>({none:'등록 정보 없음',insufficient:'데이터 부족',small:'표본 부족',lowrate:'등록률 낮음',ok:'정상'}[st]||'');
+const statusChip=st=>({uncollected:'<span class="chip mute">미수집</span>',none:'<span class="chip mute">등록 정보 없음</span>',insufficient:'<span class="chip bad">데이터 부족</span>',small:'<span class="chip warn">표본 부족</span>',lowrate:'<span class="chip warn">등록률 낮음</span>',ok:'<span class="chip ok">정상</span>'}[st]||'');
+const statusText=st=>({uncollected:'미수집',none:'등록 정보 없음',insufficient:'데이터 부족',small:'표본 부족',lowrate:'등록률 낮음',ok:'정상'}[st]||'');
 
 /* ---------- 툴팁 · 토스트 ---------- */
 const tip=$('#tip');
@@ -574,7 +574,7 @@ function rangeChart(id,rows,{dots=false,dotsOnly=false,label='시작일 분포',
   rows.forEach((r,i)=>{
     const y=T+i*RH+RH/2, st=r.st, color=r.color||'var(--s-exam)';
     s+=`<text x="${L-10}" y="${y+4}" text-anchor="end" style="fill:var(--ink);font-size:12px">${esc(r.label)}</text>`;
-    if(!st||st.n<THRESH.MIN_N){s+=`<text x="${L+4}" y="${y+4}" style="fill:var(--muted);font-size:11.5px">${st&&st.n?`데이터 부족 (n=${st.n})`:'등록 정보 없음'}</text>`;return}
+    if(!st||st.n<THRESH.MIN_N){s+=`<text x="${L+4}" y="${y+4}" style="fill:var(--muted);font-size:11.5px">${st&&st.den===0?'미수집 지역':st&&st.n?`데이터 부족 (n=${st.n})`:'등록 정보 없음'}</text>`;return}
     if(dots||dotsOnly){let k=0;for(const v of st.values){const j=((k*7919)%11-5)/5*7;k++;s+=`<circle cx="${x(v)}" cy="${y+j}" r="${dotsOnly?2.6:1.8}" style="fill:${color};fill-opacity:${dotsOnly?.45:.3}"/>`}}
     if(!dotsOnly){
       s+=`<line x1="${x(st.min)}" x2="${x(st.max)}" y1="${y}" y2="${y}" style="stroke:var(--muted);stroke-width:1.5"/>`;
@@ -819,7 +819,7 @@ function pageRegions(m){
   const q={ay:state.ay,level:lv,grade:g,sem,type:tp};
   const rs=REGIONS.map(r=>({r,st:E.examStat(D,{...q,region:r.code})}));
   const sorted=[...rs].sort((a,b)=>(a.st.n>=THRESH.MIN_N?a.st.med:1e9)-(b.st.n>=THRESH.MIN_N?b.st.med:1e9));
-  const lab=x=>x.r.name+(x.st.n<THRESH.WARN_N?' *':'');
+  const lab=x=>x.r.name+(x.st.den>0&&x.st.n<THRESH.WARN_N?' *':'');
   rangeChart('r-med',sorted.map(x=>({label:lab(x),st:x.st,den:x.st.den,tipTitle:x.r.full})));
   rangeChart('r-dist',rs.map(x=>({label:lab(x),st:x.st,den:x.st.den,tipTitle:x.r.full})),{dotsOnly:true});
   histChart('r-hist',E.examStat(D,{...q,region:state.region}));
@@ -1174,7 +1174,7 @@ function pageData(m){
       const S=await getJSON(`${state.ay}/stats.json`);let tot=0,bad=[];
       const y=x=>x==null?null:+E.ymd(x);
       for(const r of S.exam){const [rg,lv,g,sem,type,n,den,mn,q1,med,q3,mx,le,avg,st]=r;const j=E.examStat(D,{ay:state.ay,region:rg,level:lv,grade:g,sem,type});tot++;
-        const ok=n===j.n&&den===j.den&&mn===y(j.min)&&q1===y(j.q1)&&med===y(j.med)&&q3===y(j.q3)&&mx===y(j.max)&&le===y(j.lastEnd)&&(avg==null?j.avgDays==null:Math.abs(avg-j.avgDays)<1e-3)&&st===j.status;
+        const ok=n===j.n&&den===j.den&&mn===y(j.min)&&q1===y(j.q1)&&med===y(j.med)&&q3===y(j.q3)&&mx===y(j.max)&&le===y(j.lastEnd)&&(avg==null?j.avgDays==null:Math.abs(avg-j.avgDays)<1e-3)&&(st===j.status||(den===0&&j.status==='uncollected'));
         if(!ok)bad.push(`${regionName(rg)} ${LEVEL_SHORT[lv]} ${gradeName(g)} ${sem}학기 ${TYPE_NAME[type]}: 수집기 n=${n}/중앙 ${med} · 화면 n=${j.n}/중앙 ${y(j.med)}`)}
       let mt=0,mb=0;for(const r of S.milestone){const [rg,lv,key,n,den,mn,q1,med]=r;const j=E.milestoneStat(D,{ay:state.ay,region:rg,level:lv,key});mt++;if(n!==j.n||den!==j.den||med!==y(j.med))mb++}
       out.innerHTML=bad.length||mb?`<span class="chip bad">불일치</span> 시험 ${tot}개 조합 중 ${bad.length}개, 주요 일정 ${mt}개 중 ${mb}개가 다릅니다.<ul>${bad.slice(0,10).map(b=>`<li>${esc(b)}</li>`).join('')}</ul>`

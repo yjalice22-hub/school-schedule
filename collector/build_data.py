@@ -14,7 +14,7 @@ from collections import OrderedDict
 from pathlib import Path
 
 from . import config
-from .classify import classify_name, sem_of_date
+from .classify import classify_event, grades_in_name, sem_of_date
 from .stats import summarize, status_of, ymd_to_ord, ord_to_ymd
 
 OFFICE_ORDER = {c: i for i, (c, _) in enumerate(config.OFFICES)}
@@ -98,8 +98,16 @@ def build_year(ay, school_info, rows, failed_codes=()):
     # ---------- 분류 ----------
     for r in clean:
         s = schools[idx[r["code"]]]
-        k = classify_name(r["name"], s["level"])
+        k = classify_event(r["name"], r["content"], s["level"])
         r["si"] = idx[r["code"]]
+        # 행사명에 학년이 적혀 있으면(예: "기말고사(3학년)") 학년별 행사 여부보다 행사명을 따른다.
+        # 실제 NEIS에서 "(3학년)" 행인데 학년 표시는 전 학년 Y인 경우가 많았다.
+        r["gm"] = r["g"]
+        if k["cat"] in ("EXAM", "EXAM_REVIEW"):
+            gn = grades_in_name(r["name"], config.MAXG[s["level"]])
+            if gn and gn != r["g"]:
+                r["gm"] = gn
+                k = {**k, "rule": (k["rule"] + " · " if k["rule"] else "") + "학년은 행사명 표기 사용"}
         r["k"] = k
         ds = sem_of_date(r["ymd"])
         r["sem"] = k["sem_name"] or ds
@@ -112,14 +120,15 @@ def build_year(ay, school_info, rows, failed_codes=()):
             continue
         s = schools[r["si"]]
         typ = r["k"]["type"] if r["k"]["cat"] == "EXAM" else "UNK"
-        grades = [g for g in range(1, config.MAXG[s["level"]] + 1) if r["g"] & (1 << (g - 1))] or [0]
+        grades = [g for g in range(1, config.MAXG[s["level"]] + 1) if r["gm"] & (1 << (g - 1))] or [0]
         for g in grades:
             key = (r["si"], r["sem"], typ, g)
             e = groups.get(key)
             if e is None:
-                e = groups[key] = {"dates": set(), "names": set(), "rules": [], "notes": set()}
+                e = groups[key] = {"dates": set(), "names": set(), "name_dates": set(), "rules": [], "notes": set()}
             e["dates"].add(r["ord"])
             e["names"].add(r["name"])
+            e["name_dates"].add((r["name"], r["ord"]))
             if r["k"]["rule"] not in e["rules"]:
                 e["rules"].append(r["k"]["rule"])
             if r["note"]:
@@ -136,18 +145,43 @@ def build_year(ay, school_info, rows, failed_codes=()):
                 cur.append(b)
         pieces.append(cur)
         for i, p in enumerate(pieces):
-            why = []
-            if typ == "UNK":
-                why.append(e["rules"][0] or "시험 종류 불명")
-            if g == 0:
-                why.append("학년 정보 없음(학년별 행사 여부 전부 N)")
-            if e["notes"]:
-                why.append(",".join(sorted(e["notes"])))
-            if i > 0:
-                why.append(f"같은 시험명이 {TH['GAP_SPLIT']}일 이상 떨어져 재등록")
+            names_p = sorted({nm for nm, d in e["name_dates"] if p[0] <= d <= p[-1]}) or sorted(e["names"])
             episodes.append({"si": si, "sem": sem, "type": typ, "grade": g, "start": p[0], "end": p[-1], "days": len(p),
-                             "dates": p, "names": sorted(e["names"]), "rule": " / ".join(e["rules"]),
-                             "review": bool(why), "reason": " · ".join(why)})
+                             "dates": p, "names": names_p, "rule": " / ".join(e["rules"]), "notes": set(e["notes"]),
+                             "piece": i, "review": False, "reason": ""})
+    # 종류 미표기('정기시험', '지필평가')는 같은 학교·학기·학년 안의 순서로 추정
+    by_unit = OrderedDict()
+    for ep in episodes:
+        if ep["grade"] >= 1 and not ep["notes"]:
+            by_unit.setdefault((ep["si"], ep["sem"], ep["grade"]), []).append(ep)
+    for lst in by_unit.values():
+        unk = sorted([e for e in lst if e["type"] == "UNK"], key=lambda e: e["start"])
+        if not unk:
+            continue
+        known = [e for e in lst if e["type"] != "UNK"]
+        kt = {e["type"] for e in known}
+        if len(unk) == 2 and not known:
+            unk[0]["type"], unk[1]["type"] = "MID", "FINAL"
+            for e in unk:
+                e["rule"] = "종류 미표기 → 학기 내 순서로 추정(앞=중간, 뒤=기말)"
+        elif len(unk) == 1 and kt == {"FINAL"} and unk[0]["end"] < min(e["start"] for e in known):
+            unk[0]["type"], unk[0]["rule"] = "MID", "종류 미표기 → 같은 학기 기말보다 앞서 중간으로 추정"
+        elif len(unk) == 1 and kt == {"MID"} and unk[0]["start"] > max(e["end"] for e in known):
+            unk[0]["type"], unk[0]["rule"] = "FINAL", "종류 미표기 → 같은 학기 중간보다 뒤라 기말로 추정"
+    for ep in episodes:
+        why = []
+        if ep["type"] == "UNK":
+            why.append(ep["rule"].split(" / ")[0] or "시험 종류 불명")
+            if ep["grade"] >= 1 and not ep["notes"]:
+                why[-1] += " (같은 학기 다른 시험과 순서로도 판단 불가)"
+        if ep["grade"] == 0:
+            why.append("학년 정보 없음(학년별 행사 여부 전부 N)")
+        if ep["notes"]:
+            why.append(",".join(sorted(ep["notes"])))
+        if ep["piece"] > 0 and "추정" not in ep["rule"]:
+            why.append(f"같은 시험명이 {TH['GAP_SPLIT']}일 이상 떨어져 재등록")
+        if why:
+            ep["review"], ep["reason"] = True, " · ".join(why)
     ctx = OrderedDict()
     for ep in episodes:
         if ep["review"] or ep["type"] == "UNK" or ep["grade"] == 0:
@@ -270,7 +304,7 @@ def build_year(ay, school_info, rows, failed_codes=()):
                             row += [ord_to_ymd(st[k]) for k in ("min", "q1", "med", "q3", "max")] + [ord_to_ymd(max(ends)), round(sum(days) / n, 4)]
                         else:
                             row += [None] * 7
-                        row.append(status_of(n, rate, TH))
+                        row.append(status_of(n, rate, TH, den))
                         exam_stats.append(row)
             for k in MS_KEYS:
                 vals = [ymd_to_ord(ms[si][k]) for si in ss if ms[si].get(k) is not None]

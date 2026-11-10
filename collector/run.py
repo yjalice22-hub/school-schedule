@@ -42,7 +42,12 @@ def main(argv=None):
     ap.add_argument("--cache", default="cache")
     ap.add_argument("--max-age-hours", type=float, default=None)
     ap.add_argument("--source-label", default=None, help="manifest의 source 값 (기본: NEIS, 모의 서버면 MOCK)")
+    ap.add_argument("--workers", type=int, default=None, help="학교별 조회 동시 실행 수 (기본 6)")
     args = ap.parse_args(argv)
+    try:
+        sys.stdout.reconfigure(line_buffering=True)   # GitHub Actions 로그에 진행 상황이 바로 보이도록
+    except AttributeError:
+        pass
 
     if not config.API_KEY:
         print("NEIS_API_KEY 환경변수가 없습니다. README의 '인증키 넣기'를 따라 설정하세요.", file=sys.stderr)
@@ -71,13 +76,16 @@ def main(argv=None):
         print(f"  초·중·고 {len(schools):,}곳")
         for ay in years:
             print(f"[2/3] {ay}학년도 학사일정 수집")
-            rows, rep = collect_schedule(client, ck, ay, schools, offices, args.mode)
+            rows, rep = collect_schedule(client, ck, ay, schools, offices, args.mode, workers=args.workers, probe=ay > cur)
+            args.mode = rep["mode"]   # 다음 학년도부터는 판정 생략
             failed = rep["failed_schools"]
             print(f"[3/3] {ay}학년도 집계 ({len(rows):,}행, 실패 학교 {len(failed)}곳)")
             files, summary = build_year(ay, schools, rows, failed)
             ratio = len(failed) / max(1, len(schools))
             yr = {"mode": rep["mode"], "rows": len(rows), "failedSchools": len(failed), "failedSchoolCodes": failed[:200],
-                  "fallbackChunks": rep["fallback_chunks"], **summary}
+                  "fallbackChunks": rep["fallback_chunks"], "probe": rep.get("probe"), **summary}
+            if rep.get("skipped"):
+                summary["message"] = yr["message"] = "표본 학교 조회 결과 아직 등록된 일정이 없어 전체 조회를 건너뛰었습니다"
             if ratio > config.MAX_FAILED_SCHOOL_RATIO and (out / str(ay)).exists():
                 yr["status"] = "kept_previous"
                 yr["message"] = f"실패 학교 비율 {ratio:.1%} > 기준 {config.MAX_FAILED_SCHOOL_RATIO:.0%} — 이전 데이터를 유지했습니다"

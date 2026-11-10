@@ -6,8 +6,10 @@ API_KEY = os.environ.get("NEIS_API_KEY", "").strip()
 BASE_URL = os.environ.get("NEIS_BASE_URL", "https://open.neis.go.kr/hub").rstrip("/")
 
 PAGE_SIZE = int(os.environ.get("NEIS_PAGE_SIZE", "1000"))          # NEIS 1회 최대 1,000건
-REQUEST_INTERVAL = float(os.environ.get("NEIS_INTERVAL", "0.15"))  # 호출 간 최소 간격(초)
+REQUEST_INTERVAL = float(os.environ.get("NEIS_INTERVAL", "0.1"))   # 요청 시작 간 최소 간격(초) — 초당 최대 10회
 MAX_RETRIES = int(os.environ.get("NEIS_MAX_RETRIES", "5"))
+WORKERS = int(os.environ.get("NEIS_WORKERS", "6"))                 # 학교별 조회 동시 실행 수
+PROBE_SIZE = int(os.environ.get("NEIS_PROBE_SIZE", "60"))          # 다음 학년도 탐색 조회 표본 학교 수
 TIMEOUT = float(os.environ.get("NEIS_TIMEOUT", "30"))
 CACHE_MAX_AGE_HOURS = float(os.environ.get("NEIS_CACHE_MAX_AGE_HOURS", "48"))  # 이 시간 안에 받은 조각은 재사용(중단 후 재개)
 

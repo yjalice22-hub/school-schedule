@@ -282,13 +282,13 @@ def build_year(ay, school_info, rows, failed_codes=()):
     for rg in ["ALL"] + [c for c, _ in config.OFFICES]:
         for lv in "EMH":
             ss = by_rl.get((rg, lv), [])
-            for g in ["ALL"] + list(range(1, config.MAXG[lv] + 1)):
+            for g in ["ALL"] + (["G12"] if lv in "MH" else []) + list(range(1, config.MAXG[lv] + 1)):
                 for sem in (1, 2):
                     for typ in ("MID", "FINAL"):
                         starts, ends, days = [], [], []
                         for si in ss:
                             cand = [e for e in eps_by.get(si, []) if e["sem"] == sem and e["type"] == typ and not e["review"]
-                                    and (e["grade"] >= 1 if g == "ALL" else e["grade"] == g)]
+                                    and (e["grade"] >= 1 if g == "ALL" else e["grade"] in (1, 2) if g == "G12" else e["grade"] == g)]
                             if not cand:
                                 continue
                             first = cand[0]

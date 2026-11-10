@@ -80,7 +80,7 @@ const OPT={
   levelAll:()=>[['E','초등학교'],['M','중학교'],['H','고등학교']],
   levelMH:()=>[['M','중학교'],['H','고등학교']],
   levelAny:()=>[['ALL','전체'],['E','초등학교'],['M','중학교'],['H','고등학교']],
-  grade:(lv)=>[['ALL','전체 학년'],...Array.from({length:lv==='ALL'?6:MAXG[lv]},(_,i)=>[i+1,`${i+1}학년`])],
+  grade:(lv)=>[['ALL','전체 학년'],...(lv==='M'||lv==='H'?[['G12','1·2학년 (묶음)']]:[]),...Array.from({length:lv==='ALL'?6:MAXG[lv]},(_,i)=>[i+1,`${i+1}학년`])],
   semAll:()=>[['ALL','1·2학기'],[1,'1학기'],[2,'2학기']],
   sem:()=>[[1,'1학기'],[2,'2학기']],
   typeAll:()=>[['ALL','중간·기말'],['MID','중간고사'],['FINAL','기말고사']],
@@ -98,7 +98,7 @@ function bindFilters(root){
     if(v!=='ALL'&&/^\d+$/.test(v))v=+v;
     state[k]=v;
     // 학교급을 바꾸면 범위를 벗어난 학년은 전체로
-    const fix=(lk,gk)=>{const lv=state[lk];if(state[gk]!=='ALL'&&lv!=='ALL'&&state[gk]>MAXG[lv])state[gk]='ALL'};
+    const fix=(lk,gk)=>{const lv=state[lk];if(state[gk]==='G12'&&lv!=='M'&&lv!=='H')state[gk]='ALL';else if(state[gk]!=='ALL'&&state[gk]!=='G12'&&lv!=='ALL'&&state[gk]>MAXG[lv])state[gk]='ALL'};
     fix('level','grade');fix('rLevel','rGrade');fix('cLevel','cGrade');
     if(k!=='pick')state.pick=null;
     saveState();render();
@@ -351,7 +351,7 @@ function heatmap(id,rowsData,weeks,{label=''}={}){
 
 /* ---------- 공통 계산 ---------- */
 const regionName=c=>c==='ALL'?'전국':REGION_BY[c].name;
-const gradeName=g=>g==='ALL'?'전체 학년':g===0?'학년 미지정':`${g}학년`;
+const gradeName=g=>g==='ALL'?'전체 학년':g==='G12'?'1·2학년':g===0?'학년 미지정':`${g}학년`;
 const SEMS=s=>s==='ALL'?[1,2]:[s];
 const TYPES=t=>t==='ALL'?['MID','FINAL']:[t];
 const examLabel=(sem,type)=>`${sem}학기 ${TYPE_NAME[type]}`;
@@ -366,14 +366,20 @@ const shiftTxt=v=>v==null?'–':v===0?'변동 없음':(v>0?`+${v}일 늦음`:`${
    ================================================================ */
 function pageExams(m){
   const lvs=state.level, maxg=MAXG[lvs];
-  if(state.grade!=='ALL'&&state.grade>maxg)state.grade='ALL';
+  if(state.grade==='G12'&&lvs==='E')state.grade='ALL';
+  if(state.grade!=='ALL'&&state.grade!=='G12'&&state.grade>maxg)state.grade='ALL';
   m.innerHTML=head('시험 일정 분석','지역·학교급·학년별로 중간·기말고사 시작일이 언제 몰리는지 봅니다. 표의 행을 누르면 아래 차트가 그 조건으로 바뀝니다.')+
     filterBar([['ay','학년도','ay'],['region','지역','region'],['level','학교급','levelAll'],['grade','학년','grade',lvs],['sem','학기','semAll'],['type','시험','typeAll']])+
     yearNotice(state.ay)+(lvs==='E'?`<div class="notice info">초등학교는 정기 중간·기말고사를 보지 않는 학교가 대부분입니다. 등록된 학교가 없으면 '등록 정보 없음'으로 표시하며, 초등 평가 일정은 '초등학교 학사일정' 화면에서 봅니다.</div>`:'')+
     `<div class="kpis" id="kpis"></div>
      <section class="card"><div class="card-h"><div><h3>시험 시작일 통계표</h3><p>학교마다 시험 시작일을 하나로 정한 뒤 계산합니다. 여러 날·여러 행으로 등록된 시험도 학교당 1회로 셉니다. 등록 ${THRESH.MIN_N}곳 미만은 '데이터 부족', ${THRESH.WARN_N}곳 미만은 '표본 부족'으로 표시합니다.</p></div></div><div id="tbl"></div></section>
      <div class="grid2">${chartCard('c-hist','날짜별 시험 시작 학교 수','',`<span class="chip mute" id="pickLabel"></span>`)}${chartCard('c-period','시험 집중 기간과 전체 등록 기간','집중 기간은 첫 시험일의 25~75% 구간이고, 전체 기간은 실제 시험이 진행된 날까지 포함합니다.')}</div>
+     ${(lvs==='M'||lvs==='H')?chartCard('c-split','1·2학년 vs 3학년','같은 학교라도 3학년은 시험을 일찍 보는 경우가 많아 따로 봅니다. 1·2학년은 학교마다 1·2학년 중 이른 시작일 하나로 셉니다.'):''}
      ${chartCard('c-box','학기·시험별 시작일 분포','막대 = 집중 기간(25~75%), 굵은 선 = 중앙값, 가는 선 = 가장 이른~가장 늦은 시작일, 점 = 학교별 시작일')}`;
+  if((lvs==='M'||lvs==='H')&&state.grade==='ALL'){
+    m.querySelector('#kpis').insertAdjacentHTML('beforebegin',`<div class="notice info" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><span><b>전체 학년</b>은 3학년의 이른 시험까지 섞여 집중 기간이 넓게 나옵니다. 광고·콘텐츠 시점을 정할 때는 학년 묶음으로 나눠 보세요.</span><span class="btns"><button class="btn primary" data-g="G12">1·2학년으로 보기</button><button class="btn" data-g="3">3학년으로 보기</button></span></div>`);
+    m.querySelectorAll('[data-g]').forEach(b=>b.onclick=()=>{state.grade=b.dataset.g==='3'?3:'G12';saveState();render()});
+  }
   bindFilters(m);
   const regions=state.region==='ALL'?['ALL',...REGIONS.map(r=>r.code)]:[state.region];
   const rows=[];
@@ -405,6 +411,19 @@ function pageExams(m){
   histChart('c-hist',P.ok?st:{n:st.n});periodChart('c-period',st);
   const boxRows=rows.filter(r=>r.q.region===P.q.region).map(r=>({label:`${r.semL} ${r.typeL}`,st:r.st,den:r.den,tipTitle:`${r.region} ${r.semL} ${r.typeL}`}));
   rangeChart('c-box',boxRows,{dots:true,lo:ayStart(state.ay)+30,hi:ayStart(state.ay)+300});
+  if(lvs==='M'||lvs==='H'){
+    const sp=[];
+    for(const se of SEMS(state.sem))for(const tp of TYPES(state.type))for(const gg of ['G12',3]){
+      const st2=E.examStat(D,{...P.q,sem:se,type:tp,grade:gg});
+      sp.push({label:`${se}학기 ${TYPE_NAME[tp].replace('고사','')} · ${gradeName(gg)}`,st:st2,den:st2.den,color:gg==='G12'?'var(--s-grad)':'var(--g3)',tipTitle:`${P.region} ${se}학기 ${TYPE_NAME[tp]} · ${gradeName(gg)}`});
+    }
+    rangeChart('c-split',sp,{dots:true,lo:ayStart(state.ay)+30,hi:ayStart(state.ay)+300});
+    if(state.grade==='ALL'&&P.ok){
+      const a=E.examStat(D,{...P.q,grade:'G12'}),b=E.examStat(D,{...P.q,grade:3});
+      const f=x=>x.n>=THRESH.MIN_N?`${fmtMD(x.q1)}~${fmtMD(x.q3)}`:'데이터 부족';
+      $('#kpis',m).insertAdjacentHTML('beforeend',kpi('집중 기간 · 학년 묶음별',`${f(a)} / ${f(b)}`,`1·2학년 / 3학년 (${P.semL} ${P.typeL})`));
+    }
+  }
   bindPNG(m);
 }
 const head=(t,p)=>`<div class="page-head"><div><h2>${t}</h2><p>${p}</p></div>${IS_REAL()?'':'<span class="chip sample">모의 데이터</span>'}</div>`;
@@ -427,6 +446,7 @@ function pageGrades(m){
   const G=[1,2,3];
   const stats=G.map(g=>E.examStat(D,{...base,grade:g,sem,type:tp}));
   const stAll=E.examStat(D,{...base,grade:'ALL',sem,type:tp});
+  const st12=E.examStat(D,{...base,grade:'G12',sem,type:tp});
   // 같은 학교 내 학년별 시작일 차이
   let multi=0,diff=0,early=0,earlyBase=0;const missing=[0,0,0];
   for(const s of E.schoolsBy(D,state.region,lv,state.ay)){
@@ -438,12 +458,12 @@ function pageGrades(m){
     for(const g of G)if(by[g]==null)missing[g-1]++;
     if(by[3]!=null&&(by[1]!=null||by[2]!=null)){earlyBase++;if(by[3]<=Math.min(by[1]??Infinity,by[2]??Infinity)-7)early++}
   }
-  const g3=stats[2],g12=E.summarize([...stats[0].per,...stats[1].per].map(p=>p.start));
+  const g3=stats[2],g12=st12.n>=THRESH.MIN_N?st12:null;
   $('#kpis',m).innerHTML=kpi('학년별 시작일이 다른 학교',`${diff.toLocaleString()}곳`,`2개 학년 이상 등록한 ${multi.toLocaleString()}곳 중 ${pct(multi?diff/multi:null)}`)+
     kpi(`3학년이 1주 이상 먼저 시작`,`${early.toLocaleString()}곳`,`3학년과 다른 학년을 함께 등록한 ${earlyBase}곳 기준`)+
     kpi('3학년 중앙값 vs 1·2학년',g3.n>=THRESH.MIN_N&&g12?`${fmtMD(g3.med)} / ${fmtMD(g12.med)}`:'데이터 부족',g3.n>=THRESH.MIN_N&&g12?`${g12.med-g3.med>0?(g12.med-g3.med)+'일 빠름':g3.med-g12.med+'일 늦음'}`:'')+
     kpi('일정이 없는 학년 (다른 학년은 등록)',`1학년 ${missing[0]} · 2학년 ${missing[1]} · 3학년 ${missing[2]}`,lv==='M'?'중1은 자유학기 등으로 지필평가가 없을 수 있음 (확인 필요)':'시험 미실시 또는 미등록');
-  rangeChart('g-box',[...G.map((g,i)=>({label:`${g}학년`,st:stats[i],den:stats[i].den,color:`var(--g${g})`})),{label:'전체 학년',st:stAll,den:stAll.den,tipTitle:'전체 학년 (학교별 가장 이른 시작일)'}],{dots:true});
+  rangeChart('g-box',[...G.map((g,i)=>({label:`${g}학년`,st:stats[i],den:stats[i].den,color:`var(--g${g})`})),{label:'1·2학년',st:st12,den:st12.den,color:'var(--s-grad)',tipTitle:'1·2학년 (학교별 1·2학년 중 이른 시작일)'},{label:'전체 학년',st:stAll,den:stAll.den,tipTitle:'전체 학년 (학교별 가장 이른 시작일)'}],{dots:true});
   hbarChart('g-rate',G.map((g,i)=>({label:`${g}학년`,v:stats[i].rate||0,color:`var(--g${g})`,tip:`${g}학년 ${stats[i].n} / ${stats[i].den}곳`})));
   // 달력 스트립
   const hc=$('#g-cal');
@@ -464,7 +484,7 @@ function pageGrades(m){
   }
   // 표
   const rows=[];
-  for(const g of [...G,'ALL'])for(const se of [1,2])for(const t of ['MID','FINAL']){
+  for(const g of [...G,'G12','ALL'])for(const se of [1,2])for(const t of ['MID','FINAL']){
     const st=E.examStat(D,{...base,grade:g,sem:se,type:t});rows.push({grade:gradeName(g),semL:`${se}학기`,typeL:TYPE_NAME[t],st,ok:st.n>=THRESH.MIN_N});
   }
   const S=r=>r.ok?r.st:{};
@@ -506,10 +526,10 @@ function pageRegions(m){
   const hrows=REGIONS.map(r=>{
     const ss=E.schoolsBy(D,r.code,lv,state.ay);const c=new Array(weeks.length).fill(0);
     for(const s of ss){const seen=new Set();
-      for(const e of D.epBySchool[s.idx]){if(e.a!==state.ay||e.review||e.type==='UNK'||e.grade<1||(g!=='ALL'&&e.grade!==g))continue;
+      for(const e of D.epBySchool[s.idx]){if(e.a!==state.ay||e.review||e.type==='UNK'||!E.gradeMatch(e.grade,g))continue;
         const k=`${e.sem}|${e.type}`;const cur=seen.has(k);if(cur)continue;
         // 학교·학기·종류별 가장 이른 시작일 1개만
-        const first=D.epBySchool[s.idx].filter(x=>x.a===state.ay&&!x.review&&x.sem===e.sem&&x.type===e.type&&x.grade>=1&&(g==='ALL'||x.grade===g)).reduce((a,b)=>a.start<=b.start?a:b);
+        const first=D.epBySchool[s.idx].filter(x=>x.a===state.ay&&!x.review&&x.sem===e.sem&&x.type===e.type&&E.gradeMatch(x.grade,g)).reduce((a,b)=>a.start<=b.start?a:b);
         seen.add(k);const j=Math.floor((mondayOf(first.start)-weeks[0])/7);if(j>=0&&j<c.length)c[j]++}}
     return {label:r.name,den:ss.length,small:ss.length<THRESH.WARN_N,cells:c.map(x=>({c:x,v:ss.length?x/ss.length:0}))};
   });
@@ -617,12 +637,12 @@ function calendarData(year,region,level,grade){
   const mk=()=>new Array(N).fill(0);
   const c={exam:mk(),start:mk(),vac:mk(),open:mk(),grad:mk(),disc:mk(),eval:mk()};
   const ss=E.schoolsBy(D,region,level,[year-1,year]);
-  const gOK=(r)=>grade==='ALL'||r.g===0||(r.g&(1<<(grade-1)));
+  const gOK=(r)=>grade==='ALL'||r.g===0||(grade==='G12'?(r.g&3):(r.g&(1<<(grade-1))));
   const names=new Map();
   const MAP={VACATION:'vac',OPENING:'open',ENTRANCE:'open',GRAD:'grad',DISCRETION:'disc',DIAG:'eval',ACHIEVE:'eval'};
   for(const s of ss){
     const exd=new Set(),stk=new Map(),exn=new Set();
-    for(const e of D.epBySchool[s.idx]){if(e.review||e.grade<1||(grade!=='ALL'&&e.grade!==grade))continue;if(e.a!==year-1&&e.a!==year)continue;
+    for(const e of D.epBySchool[s.idx]){if(e.review||!E.gradeMatch(e.grade,grade))continue;if(e.a!==year-1&&e.a!==year)continue;
       for(const d of e.dates){exd.add(d);if(d>=lo&&d<=hi)exn.add(d+'|'+e.names[0])}const k=`${e.a}|${e.sem}|${e.type}`;if(!stk.has(k)||e.start<stk.get(k))stk.set(k,e.start)}
     for(const d of exd)if(d>=lo&&d<=hi)c.exam[d-lo]++;
     for(const key of exn)names.set(key,(names.get(key)||0)+1);
@@ -641,13 +661,13 @@ function calendarData(year,region,level,grade){
 }
 function pageCalendar(m){
   const y=state.calYear,lv=state.cLevel,g=state.cGrade;
-  m.innerHTML=head('연간 학사일정 캘린더','1월~12월 한눈에 보기. 칸의 파란 농도는 그날 시험을 치르는 학교 비율이고, 검은 테두리는 시험 집중 기간(첫 시험일 25~75%)입니다. 날짜를 누르면 그날 일정이 오른쪽에 나옵니다.')+
+  m.innerHTML=head('연간 학사일정 캘린더','1월~12월 한눈에 보기. 칸의 파란 농도는 그날 시험을 치르는 학교 비율이고, 검은 테두리는 시험 집중 기간(첫 시험일 25~75%)입니다. 전체 학년을 고르면 1·2학년(실선)과 3학년(점선) 집중 기간을 따로 표시합니다. 날짜를 누르면 그날 일정이 오른쪽에 나옵니다.')+
     filterBar([['calYear','연도','calYear'],['region','지역','region'],['cLevel','학교급','levelAny'],['cGrade','학년','grade',lv]])+
     `<div class="kpis" id="kpis"></div>
      <div class="grid2"><section class="card"><div class="card-h"><div><h3>이번 달 주요 학사일정</h3><p id="monthLbl"></p></div></div><ul class="list" id="thisMonth"></ul></section>
      <section class="card"><div class="card-h"><div><h3>향후 30일 개학·방학·졸업 일정</h3><p>${fmtD(TODAY)} ~ ${fmtD(TODAY+30)}</p></div></div><ul class="list" id="upcoming"></ul></section></div>
      <div class="two-col"><section class="card"><div class="card-h"><div><h3>${y}년 캘린더</h3></div><div class="btns"><button class="btn" id="calCsv">일자별 CSV</button></div></div>
-       <div class="legend">${CAL_CATS.map(c=>`<span><i style="background:${c.color}"></i>${c.label}</span>`).join('')}<span><i style="background:transparent;border:1.5px solid var(--ink)"></i>시험 집중 기간</span><span><i style="background:transparent;border:2px solid var(--today)"></i>오늘</span></div>
+       <div class="legend">${CAL_CATS.map(c=>`<span><i style="background:${c.color}"></i>${c.label}</span>`).join('')}${g==='ALL'&&lv!=='E'?'<span><i style="background:transparent;border:1.5px solid var(--ink)"></i>집중 기간 · 1·2학년</span><span><i style="background:transparent;border:1.5px dashed var(--ink)"></i>집중 기간 · 3학년</span>':'<span><i style="background:transparent;border:1.5px solid var(--ink)"></i>시험 집중 기간</span>'}<span><i style="background:transparent;border:2px solid var(--today)"></i>오늘</span></div>
        <div class="cal-grid" id="cal"></div></section>
      <aside style="display:flex;flex-direction:column;gap:16px;min-width:0"><section class="card"><div class="card-h"><div><h3 id="dayTitle">날짜를 선택하세요</h3></div></div><div id="dayDetail" style="font-size:13px;color:var(--ink2)">캘린더의 날짜를 누르면 일정 수와 원본 행사명을 보여줍니다.</div></section>
      <section class="card"><div class="card-h"><div><h3>지역별 시험 집중도 (향후 30일)</h3><p>${lv==='ALL'?'전체 학교급':LEVELS[lv]} ${gradeName(g)} · 지역 학교 중 시험을 시작하는 비율</p></div></div><div id="regConc"></div></section></aside></div>`;
@@ -658,8 +678,11 @@ function pageCalendar(m){
   const win=[];
   if(lv!=='E')for(const a of [y-1,y])for(const se of [1,2])for(const t of ['MID','FINAL']){
     const lvls=lv==='ALL'?['M','H']:[lv];
-    for(const L of lvls){const st=E.examStat(D,{ay:a,region:state.region,level:L,grade:g,sem:se,type:t});if(st.n>=THRESH.MIN_N)win.push({a,se,t,L,q1:st.q1,q3:st.q3,med:st.med,n:st.n})}}
+    // 전체 학년이면 1·2학년과 3학년의 집중 기간을 따로 잡는다 (3학년 조기 시험 때문에 합치면 한 달 가까이 넓어짐)
+    for(const L of lvls)for(const gg of (g==='ALL'?['G12',3]:[g])){const st=E.examStat(D,{ay:a,region:state.region,level:L,grade:gg,sem:se,type:t});if(st.n>=THRESH.MIN_N)win.push({a,se,t,L,gg,q1:st.q1,q3:st.q3,med:st.med,n:st.n})}}
   const inWin=d=>win.some(w=>d>=w.q1&&d<=w.q3);
+  // 테두리: 실선 = 1·2학년(또는 선택한 학년), 점선 = 3학년, 굵은 실선 = 둘 다
+  const winCls=d=>{const a=win.some(w=>w.gg!==3&&d>=w.q1&&d<=w.q3),b=win.some(w=>w.gg===3&&g==='ALL'&&d>=w.q1&&d<=w.q3);return a&&b?'focus-both':a?'focus-win':b?'focus-win3':''};
   // 요약
   const t30=[TODAY,TODAY+30];
   const startsInRange=(cdx,a,b)=>{let s=0;for(let d=a;d<=b;d++){const i=d-cdx.lo;if(i>=0&&i<cdx.N)s+=cdx.c.start[i]}return s};
@@ -671,12 +694,12 @@ function pageCalendar(m){
     kpi('향후 30일 시험 시작',`${n30.toLocaleString()}건`,'학교·학기·시험 종류별 시작 1회 기준')+
     kpi(`${y}년 시험 시작 최다 주간`,bestW?`${fmtMD(bestW)} 주`:'–',bestW?`${bestV.toLocaleString()}건 시작`:'')+
     kpi('시험 집중 기간',win.filter(w=>w.a===E.ayOf(TODAY)&&w.q3>=TODAY).sort((a,b)=>a.q1-b.q1).slice(0,1).map(w=>`${fmtMD(w.q1)}~${fmtMD(w.q3)}`)[0]||'–',
-      win.filter(w=>w.a===E.ayOf(TODAY)&&w.q3>=TODAY).sort((a,b)=>a.q1-b.q1).slice(0,1).map(w=>`다음: ${LEVEL_SHORT[w.L]} ${w.se}학기 ${TYPE_NAME[w.t]}`)[0]||'올해 남은 집중 기간 없음');
+      win.filter(w=>w.a===E.ayOf(TODAY)&&w.q3>=TODAY).sort((a,b)=>a.q1-b.q1).slice(0,1).map(w=>`다음: ${LEVEL_SHORT[w.L]}${g==='ALL'?' '+gradeName(w.gg):''} ${w.se}학기 ${TYPE_NAME[w.t]}`)[0]||'올해 남은 집중 기간 없음');
   // 이번 달
   $('#monthLbl',m).textContent=`${y}년 ${thisM}월 · 등록 학교 수 기준`;
   const mlo=dn(y,thisM,1),mhi=dn(thisM===12?y+1:y,thisM===12?1:thisM+1,1)-1;
   const items=[];
-  for(const w of win)if(w.q3>=mlo&&w.q1<=mhi)items.push([`${LEVEL_SHORT[w.L]} ${w.se}학기 ${TYPE_NAME[w.t]} 집중`,`${fmtMD(w.q1)}~${fmtMD(w.q3)} · 중앙 ${fmtMD(w.med)}`,w.q1]);
+  for(const w of win)if(w.q3>=mlo&&w.q1<=mhi)items.push([`${LEVEL_SHORT[w.L]}${g==='ALL'?' '+gradeName(w.gg):''} ${w.se}학기 ${TYPE_NAME[w.t]} 집중`,`${fmtMD(w.q1)}~${fmtMD(w.q3)} · 중앙 ${fmtMD(w.med)}`,w.q1]);
   const peakOf=(k,lab)=>{let best=-1,bd=null,tot=0;for(let d=mlo;d<=mhi;d++){const v=c[k][d-lo]||0;tot+=v;if(v>best){best=v;bd=d}}if(best>0)items.push([lab,`최다 ${fmtMD(bd)} · ${best}곳`,bd])};
   peakOf('open','개학·입학');peakOf('grad','졸업식');peakOf('disc','재량휴업');peakOf('eval','진단·성취도 평가');
   {let vd=0;for(let d=mlo;d<=mhi;d++)if(den&&c.vac[d-lo]/den>=0.4)vd++;if(vd)items.push(['방학 (학교 40% 이상)',`${vd}일`,mlo])}
@@ -693,7 +716,7 @@ function pageCalendar(m){
   $('#upcoming',m).innerHTML=up.length?up.map(i=>`<li><span>${esc(i[0])}</span><span>${esc(i[1])}</span></li>`).join(''):'<li><span>향후 30일 안에 등록된 개학·방학·졸업 일정이 없습니다</span><span></span></li>';
   // 지역 집중도
   const conc=REGIONS.map(r=>{const ss=E.schoolsBy(D,r.code,lv,[curAy,curAy+1]);let k=0;
-    for(const s of ss){if(D.epBySchool[s.idx].some(e=>!e.review&&e.grade>=1&&(g==='ALL'||e.grade===g)&&e.start>=TODAY&&e.start<=TODAY+30))k++}
+    for(const s of ss){if(D.epBySchool[s.idx].some(e=>!e.review&&E.gradeMatch(e.grade,g)&&e.start>=TODAY&&e.start<=TODAY+30))k++}
     return {r,v:ss.length?k/ss.length:0,k,den:ss.length}}).sort((a,b)=>b.v-a.v);
   $('#regConc',m).innerHTML=conc.map(x=>`<div class="bar-row" data-tip="${esc(`${x.r.full}\n${x.k} / ${x.den}곳`)}"><span>${x.r.name}${x.den<THRESH.WARN_N?'*':''}</span><span class="track"><span class="fill" style="display:block;width:${(x.v*100).toFixed(1)}%"></span></span><span style="text-align:right">${pct(x.v)}</span></div>`).join('');
   // 달력
@@ -710,7 +733,7 @@ function pageCalendar(m){
       const dots=[];const th=Math.max(1,den*0.05);
       if(c.open[i]>=th)dots.push('var(--s-open)');if(c.grad[i]>=th)dots.push('var(--s-grad)');if(c.disc[i]>=th)dots.push('var(--s-disc)');if(c.eval[i]>=th)dots.push('var(--s-eval)');
       const tipT=`${fmtD(d)}\n시험 중 ${c.exam[i]}곳 (${pct(ex)}) · 시작 ${c.start[i]}건\n방학 ${c.vac[i]}곳 · 개학·입학 ${c.open[i]} · 졸업 ${c.grad[i]} · 재량휴업 ${c.disc[i]} · 평가 ${c.eval[i]}`;
-      html+=`<button class="day ${isOff(d)?'we':''} ${inWin(d)?'focus-win':''} ${d===TODAY?'today':''} ${state.calPick===d?'picked':''} ${op>.55?'hot':''}" style="${bg}" data-d="${d}" data-tip="${esc(tipT)}" aria-label="${esc(tipT)}">${parts(d)[2]}${vac>=0.4?'<span class="vac"></span>':''}${dots.length?`<span class="dots">${dots.map(cc=>`<i style="background:${cc}"></i>`).join('')}</span>`:''}</button>`;
+      html+=`<button class="day ${isOff(d)?'we':''} ${winCls(d)} ${d===TODAY?'today':''} ${state.calPick===d?'picked':''} ${op>.55?'hot':''}" style="${bg}" data-d="${d}" data-tip="${esc(tipT)}" aria-label="${esc(tipT)}">${parts(d)[2]}${vac>=0.4?'<span class="vac"></span>':''}${dots.length?`<span class="dots">${dots.map(cc=>`<i style="background:${cc}"></i>`).join('')}</span>`:''}</button>`;
     }
     html+='</div></div>';
   }

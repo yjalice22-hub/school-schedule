@@ -108,6 +108,8 @@ function ingestRaw(D,ay,key,f){
 }
 
 /* ---------- 통계 질의 ---------- */
+/* 학년 조건: 'ALL' = 모든 학년, 'G12' = 1·2학년 묶음, 숫자 = 그 학년 */
+function gradeMatch(g,grade){return grade==='ALL'?g>=1:grade==='G12'?(g===1||g===2):g===grade}
 function schoolsBy(D,region,level,ay){
   const ays=Array.isArray(ay)?ay:[ay];
   return D.schools.filter(s=>(region==='ALL'||s.region===region)&&(level==='ALL'||s.level===level)&&ays.some(a=>s.years.has(a)));
@@ -119,7 +121,7 @@ function schoolsBy(D,region,level,ay){
 function examPerSchool(D,{ay,region,level,grade,sem,type}){
   const out=[];
   for(const s of schoolsBy(D,region,level,ay)){
-    const eps=D.epBySchool[s.idx].filter(e=>e.a===ay&&e.sem===sem&&e.type===type&&!e.review&&(grade==='ALL'?e.grade>=1:e.grade===grade));
+    const eps=D.epBySchool[s.idx].filter(e=>e.a===ay&&e.sem===sem&&e.type===type&&!e.review&&gradeMatch(e.grade,grade));
     if(!eps.length)continue;
     let first=eps[0];for(const e of eps)if(e.start<first.start)first=e;
     out.push({s,start:first.start,end:Math.max(...eps.map(e=>e.end)),days:first.days,eps});
@@ -145,5 +147,5 @@ function milestoneStat(D,{ay,region,level,key}){
   return {...st,n,den,rate:den?n/den:null,status:den===0?'uncollected':n===0?'none':n<THRESH.MIN_N?'insufficient':n<THRESH.WARN_N?'small':'ok'};
 }
 G.ENG={REGIONS,REGION_BY,LEVELS,LEVEL_SHORT,MAXG,TYPE_NAME,THRESH,CAT_LABEL,dn,fromYmd,parts,ymd,iso,dow,fmtD,fmtMD,monthOf,yearOf,ayOf,ayStart,ayEnd,mondayOf,isOff,
-  quantile,summarize,mean,schoolsBy,examPerSchool,examStat,milestoneStat,newStore,ingestYear,ingestRaw};
+  quantile,summarize,mean,gradeMatch,schoolsBy,examPerSchool,examStat,milestoneStat,newStore,ingestYear,ingestRaw};
 })(typeof window!=='undefined'?window:globalThis);

@@ -3,67 +3,69 @@
  "yearInfo": {
   "2025": {
    "mode": "school",
-   "rows": 698099,
+   "rows": 2182669,
    "failedSchools": 0,
    "failedSchoolCodes": [],
    "fallbackChunks": 0,
-   "schools": 3902,
-   "schoolsWithSchedule": 3856,
-   "coverage": 0.9882,
-   "episodes": 15328,
-   "reviewEpisodes": 2122,
+   "schools": 12065,
+   "schoolsWithSchedule": 11913,
+   "coverage": 0.9874,
+   "episodes": 46264,
+   "reviewEpisodes": 2006,
    "byLevel": {
     "E": {
-     "schools": 1996,
-     "withSchedule": 1975,
-     "withExam": 3
+     "schools": 6331,
+     "withSchedule": 6243,
+     "withExam": 5
     },
     "M": {
-     "schools": 1082,
-     "withSchedule": 1068,
-     "withExam": 761
+     "schools": 3325,
+     "withSchedule": 3285,
+     "withExam": 2661
     },
     "H": {
-     "schools": 824,
-     "withSchedule": 813,
-     "withExam": 692
+     "schools": 2409,
+     "withSchedule": 2385,
+     "withExam": 2092
     }
    },
    "notInSchoolInfo": 0,
    "status": "ok",
-   "collectedAt": "2026-11-09T18:13:42+09:00"
+   "collectedAt": "2026-11-10T09:36:47+09:00",
+   "probe": null
   },
   "2026": {
    "mode": "school",
-   "rows": 684262,
+   "rows": 2129395,
    "failedSchools": 0,
    "failedSchoolCodes": [],
    "fallbackChunks": 0,
-   "schools": 3902,
-   "schoolsWithSchedule": 3881,
-   "coverage": 0.9946,
-   "episodes": 15602,
-   "reviewEpisodes": 2100,
+   "schools": 12065,
+   "schoolsWithSchedule": 11944,
+   "coverage": 0.99,
+   "episodes": 46605,
+   "reviewEpisodes": 1677,
    "byLevel": {
     "E": {
-     "schools": 1996,
-     "withSchedule": 1988,
-     "withExam": 0
+     "schools": 6331,
+     "withSchedule": 6266,
+     "withExam": 6
     },
     "M": {
-     "schools": 1082,
-     "withSchedule": 1074,
-     "withExam": 746
+     "schools": 3325,
+     "withSchedule": 3289,
+     "withExam": 2622
     },
     "H": {
-     "schools": 824,
-     "withSchedule": 819,
-     "withExam": 693
+     "schools": 2409,
+     "withSchedule": 2389,
+     "withExam": 2087
     }
    },
    "notInSchoolInfo": 0,
    "status": "ok",
-   "collectedAt": "2026-11-09T19:54:39+09:00"
+   "collectedAt": "2026-11-10T09:59:15+09:00",
+   "probe": null
   },
   "2027": {
    "mode": "school",
@@ -71,34 +73,100 @@
    "failedSchools": 0,
    "failedSchoolCodes": [],
    "fallbackChunks": 0,
-   "schools": 3902,
+   "schools": 12065,
    "schoolsWithSchedule": 0,
    "coverage": 0.0,
    "episodes": 0,
    "reviewEpisodes": 0,
    "byLevel": {
     "E": {
-     "schools": 1996,
+     "schools": 6331,
      "withSchedule": 0,
      "withExam": 0
     },
     "M": {
-     "schools": 1082,
+     "schools": 3325,
      "withSchedule": 0,
      "withExam": 0
     },
     "H": {
-     "schools": 824,
+     "schools": 2409,
      "withSchedule": 0,
      "withExam": 0
     }
    },
    "notInSchoolInfo": 0,
    "status": "insufficient",
-   "collectedAt": "2026-11-09T20:54:13+09:00"
+   "collectedAt": "2026-11-10T09:59:20+09:00",
+   "probe": {
+    "sampled": 60,
+    "withData": 0
+   },
+   "message": "표본 학교 조회 결과 아직 등록된 일정이 없어 전체 조회를 건너뛰었습니다"
   }
  },
  "runs": [
+  {
+   "startedAt": "2026-11-10T09:12:31+09:00",
+   "years": [
+    2025,
+    2026,
+    2027
+   ],
+   "offices": [
+    "B10",
+    "C10",
+    "D10",
+    "E10",
+    "F10",
+    "G10",
+    "H10",
+    "I10",
+    "J10",
+    "K10",
+    "M10",
+    "N10",
+    "P10",
+    "Q10",
+    "R10",
+    "S10",
+    "T10"
+   ],
+   "status": "success",
+   "yearResults": {
+    "2025": {
+     "status": "ok",
+     "rows": 2182669,
+     "schools": 12065,
+     "coverage": 0.9874,
+     "failedSchools": 0,
+     "mode": "school",
+     "message": null
+    },
+    "2026": {
+     "status": "ok",
+     "rows": 2129395,
+     "schools": 12065,
+     "coverage": 0.99,
+     "failedSchools": 0,
+     "mode": "school",
+     "message": null
+    },
+    "2027": {
+     "status": "insufficient",
+     "rows": 0,
+     "schools": 12065,
+     "coverage": 0.0,
+     "failedSchools": 0,
+     "mode": "school",
+     "message": "표본 학교 조회 결과 아직 등록된 일정이 없어 전체 조회를 건너뛰었습니다"
+    }
+   },
+   "finishedAt": "2026-11-10T09:59:20+09:00",
+   "seconds": 2809,
+   "calls": 16432,
+   "retries": 0
+  },
   {
    "startedAt": "2026-11-09T16:33:19+09:00",
    "years": [
@@ -147,7 +215,7 @@
   }
  ],
  "source": "NEIS",
- "generatedAt": "2026-11-09T20:54:13+09:00",
+ "generatedAt": "2026-11-10T09:59:20+09:00",
  "currentAy": 2026,
  "thresholds": {
   "MIN_N": 5,
@@ -157,7 +225,7 @@
   "GAP_SPLIT": 14
  },
  "lastRun": {
-  "startedAt": "2026-11-09T16:33:19+09:00",
+  "startedAt": "2026-11-10T09:12:31+09:00",
   "years": [
    2025,
    2026,
@@ -165,24 +233,39 @@
   ],
   "offices": [
    "B10",
-   "J10"
+   "C10",
+   "D10",
+   "E10",
+   "F10",
+   "G10",
+   "H10",
+   "I10",
+   "J10",
+   "K10",
+   "M10",
+   "N10",
+   "P10",
+   "Q10",
+   "R10",
+   "S10",
+   "T10"
   ],
   "status": "success",
   "yearResults": {
    "2025": {
     "status": "ok",
-    "rows": 698099,
-    "schools": 3902,
-    "coverage": 0.9882,
+    "rows": 2182669,
+    "schools": 12065,
+    "coverage": 0.9874,
     "failedSchools": 0,
     "mode": "school",
     "message": null
    },
    "2026": {
     "status": "ok",
-    "rows": 684262,
-    "schools": 3902,
-    "coverage": 0.9946,
+    "rows": 2129395,
+    "schools": 12065,
+    "coverage": 0.99,
     "failedSchools": 0,
     "mode": "school",
     "message": null
@@ -190,16 +273,16 @@
    "2027": {
     "status": "insufficient",
     "rows": 0,
-    "schools": 3902,
+    "schools": 12065,
     "coverage": 0.0,
     "failedSchools": 0,
     "mode": "school",
-    "message": null
+    "message": "표본 학교 조회 결과 아직 등록된 일정이 없어 전체 조회를 건너뛰었습니다"
    }
   },
-  "finishedAt": "2026-11-09T20:54:13+09:00",
-  "seconds": 15654,
-  "calls": 11719,
+  "finishedAt": "2026-11-10T09:59:20+09:00",
+  "seconds": 2809,
+  "calls": 16432,
   "retries": 0
  },
  "years": [
